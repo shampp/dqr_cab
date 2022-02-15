@@ -6,6 +6,7 @@ from pathlib import Path
 from recommendation import *
 from fasttxt import load_ft_model, get_query_embeddings
 from sklearn.metrics.pairwise import euclidean_distances, cosine_similarity
+from plot import simple_plot, twinx_plot
 
 def run_bandit_arms(dt, setting, bandit):
     import transformers
@@ -20,6 +21,7 @@ def run_bandit_arms(dt, setting, bandit):
     avg_sim = {}
     avg_dst = {}
     model_dict = {}
+
     if (setting == 'scratch'):
         from transformers import BertTokenizer
         vocab = '../Data/semanticscholar/tokenizer/wordpiece/vocab.txt'
@@ -109,8 +111,9 @@ def run_bandit_round(dt,setting):
     df, X, anchor_ids, noof_anchors = get_data(dt)
     model_dict = {}
     if setting == 'pretrained':
-        experiment_bandit = ['EXP3', 'XL', 'GPT', 'CTRL']
-        from transformers import (TransfoXLLMHeadModel,TransfoXLTokenizer)
+        #experiment_bandit = ['EXP3', 'XL', 'GPT', 'CTRL']
+        experiment_bandit = ['EXP3', 'GPT', 'CTRL']
+        from transformers import (TransfoXLLMHeadModel, TransfoXLTokenizer)
         model_dest = '../Data/semanticscholar/model/xl'
         model_dict['XL'] = {}
         model_dict['XL']['model'] = TransfoXLLMHeadModel.from_pretrained(model_dest)
@@ -118,7 +121,7 @@ def run_bandit_round(dt,setting):
         model_dict['XL']['spl_tok'] = ['[<unk>]', '<unk>', '[bos]']
         model_dict['XL']['sep'] = ' [sep] '
 
-        from transformers import (GPT2LMHeadModel,GPT2Tokenizer)
+        from transformers import (GPT2LMHeadModel, GPT2Tokenizer)
         model_dest = '../Data/semanticscholar/model/gpt2/pretrained'
         model_dict['GPT'] = {}
         model_dict['GPT']['model'] = GPT2LMHeadModel.from_pretrained(model_dest)
@@ -423,7 +426,7 @@ def run_exp3_ss(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
 
     return seq_error, simv , dstv
 
-def run_exp3(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
+def run_exp3(setting, model_dict, X, true_ids, n_rounds, cand_set_sz=50, ft):
     from random import Random
     rnd1 = Random()
     rnd1.seed(42)
@@ -448,11 +451,6 @@ def run_exp3(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
         ground_queries = X[ground_actions]
         if (t == 1):
             cand = get_recommendations(curr_query, cand_set_sz, model_dict, setting)
-        tsz = len(cand)
-        cand_sz = 1 if tsz == 0 else tsz
-        cand_t = cand_t.difference(cand)
-        tsz = len(cand_t)
-        cand_t_sz = 1 if tsz == 0 else tsz
         for q in cand_t:
             w_t[q] = eta/((1-eta)*cand_t_sz*cand_sz)
         w_k = list(w_t.keys())
