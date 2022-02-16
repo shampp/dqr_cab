@@ -29,6 +29,7 @@ def run_bandit_arms(dt, setting, bandit):
         tokenizer = BertTokenizer(vocab_file=vocab, unk_token='[unk]', cls_token='[bos]', sep_token='[sep]', bos_token='[bos]', eos_token='[eos]', pad_token='[pad]')
         sep = ' [sep] '
         special_tokens = ['[sep]', '[bos]']
+
         model_dest = '../Data/semanticscholar/model/gpt2/wordpiece'
         from transformers import GPT2LMHeadModel
         model_dict['GPT'] = {}
