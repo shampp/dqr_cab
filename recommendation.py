@@ -16,9 +16,6 @@ def get_recommendations(curr_query, cand_set_sz, model_dict, setting):
     mlen = 2*context_q_no + 8
 
     if setting == 'scratch':
-        #from transformers import BertTokenizer
-        #vocab = '../Data/semanticscholar/tokenizer/wordpiece/vocab.txt'
-        #tokenizer = BertTokenizer(vocab_file=vocab, unk_token='[unk]', cls_token='[bos]', sep_token='[sep]', bos_token='[bos]', eos_token='[eos]', pad_token='[pad]')
         for method in model_dict.keys():
             logging.info("getting recommendations for %s trained from %s" %(method,setting))
             tokenizer = model_dict[method]['tok']

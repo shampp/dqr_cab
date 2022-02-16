@@ -4,9 +4,10 @@ import numpy as np
 import logging
 from pathlib import Path
 from recommendation import *
-from fasttxt import load_ft_model, get_query_embeddings
+from fasttxt import load_ft_model
 from sklearn.metrics.pairwise import euclidean_distances, cosine_similarity
 from plot import simple_plot, twinx_plot
+from policy import policy_evaluation
 
 def run_bandit_arms(dt, setting, bandit):
     import transformers
@@ -105,14 +106,14 @@ def run_bandit_round(dt,setting):
     rnd.seed(44)
 
     n_rounds = 500
-    #n_rounds = 5
     cand_set_sz = 3
     experiment_bandit = list() 
     df, X, anchor_ids, noof_anchors = get_data(dt)
     model_dict = {}
     if setting == 'pretrained':
         #experiment_bandit = ['EXP3', 'XL', 'GPT', 'CTRL']
-        experiment_bandit = ['EXP3', 'GPT', 'CTRL']
+        experiment_bandit = ['GPT', 'EXP3', 'EXP3-SS', 'DQR-CAB']
+
         from transformers import (TransfoXLLMHeadModel, TransfoXLTokenizer)
         model_dest = '../Data/semanticscholar/model/xl'
         model_dict['XL'] = {}
@@ -136,37 +137,13 @@ def run_bandit_round(dt,setting):
         model_dict['CTRL']['tok'] = CTRLTokenizer.from_pretrained('sshleifer/tiny-ctrl')
         model_dict['CTRL']['spl_tok'] = ['[sep]']
         model_dict['CTRL']['sep'] = ' [sep] '
-    else:
-        experiment_bandit = ['EXP3', 'GPT', 'CTRL']
-        #model_dict['EXP3'] = 'all'
-        from transformers import BertTokenizer
-        vocab = '../Data/semanticscholar/tokenizer/wordpiece/vocab.txt'
-        tokenizer = BertTokenizer(vocab_file=vocab, unk_token='[unk]', cls_token='[bos]', sep_token='[sep]', bos_token='[bos]', eos_token='[eos]', pad_token='[pad]')
-        sep = ' [sep] '
-        special_tokens = ['[sep]', '[bos]']
-
-        model_dest = '../Data/semanticscholar/model/gpt2/wordpiece'
-        from transformers import GPT2LMHeadModel
-        model_dict['GPT'] = {}
-        model_dict['GPT']['model'] = GPT2LMHeadModel.from_pretrained(model_dest)
-        model_dict['GPT']['tok'] = tokenizer
-        model_dict['GPT']['spl_tok'] = special_tokens
-        model_dict['GPT']['sep'] = sep
-
-        model_dest = '../Data/semanticscholar/model/ctrl'
-        from transformers import CTRLLMHeadModel
-        model_dict['CTRL'] = {}
-        model_dict['CTRL']['model'] = CTRLLMHeadModel.from_pretrained(model_dest)
-        model_dict['CTRL']['tok'] = tokenizer
-        model_dict['CTRL']['spl_tok'] = special_tokens
-        model_dict['CTRL']['sep'] = sep
 
     ft = load_ft_model()
     regret = {}
     avg_sim = {}
     avg_dst = {}
     src = get_data_source(dt)
-    #for bandit in model_dict.keys(): 
+
     for bandit in experiment_bandit:
         log_file = Path('../Data/', src, 'logs',src+'_%s_%s.log' %(setting, bandit))
         logging.basicConfig(filename = log_file, format='%(asctime)s : %(message)s', level=logging.INFO)
@@ -192,375 +169,7 @@ def run_bandit_round(dt,setting):
         #print(sum(zip(*regret[bandit].values())))
         print("average similarity of %s is: %f" %(bandit, simv))
         print("average distance of %s is: %f" %(bandit, dstv))
-    
-    import matplotlib.pyplot as plt
-    from matplotlib import rc
-    with plt.style.context(("seaborn-darkgrid",)):
-        f = plt.figure()
-        f.clear()
-        plt.clf()
-        plt.close(f)
-        fig, ax = plt.subplots(frameon=False)
-        rc('mathtext',default='regular')
-        rc('text', usetex=True)
-        col_list = ['b', 'r', 'k', 'c', 'm', 'g']
-        #col = {experiment_bandit[i]:col_list[i] for i in range(len(experiment_bandit))}
-        col = {'EXP3':'b', 'GPT':'c', 'CTRL':'r', 'XL':'m'}
-        sty = {'EXP3':'-', 'GPT':':', 'CTRL':'--', 'XL':'-.'}
-        labels = {'EXP3':'EXP3-SS', 'GPT':'GPT', 'CTRL':'CTRL', 'XL':'XL'}
-        regret_file = '%s_cum_regret.txt' %(setting)
-        with open(regret_file, "w") as regret_fd:
-            for bandit in experiment_bandit:
-                cum_regret = [sum(x)/noof_anchors for x in zip(*regret[bandit].values())]
-                val = bandit+','+','.join([str(e) for e in cum_regret])
-                print(val, file=regret_fd)
-                ax.plot(range(n_rounds), cum_regret, c=col[bandit], ls=sty[bandit], label=labels[bandit])
-                ax.set_xlabel('rounds')
-                ax.set_ylabel('cumulative regret')
-                ax.legend()
-        fig.savefig('round_regret_%s.pdf' %(setting),format='pdf')
-        f = plt.figure()
-        f.clear()
-        plt.close(f)
 
-def run_xl(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
-    from random import Random
-    rnd = Random()
-    rnd.seed(42)
-    seq_error = np.zeros(shape=(n_rounds,1))
-    simv = np.zeros(shape=(n_rounds, 1))
-    dstv = np.zeros(shape=(n_rounds, 1))
+    filename = 'round_regret.pdf'
+    simple_plot(regret,filename)
 
-    for t in range(n_rounds):
-        curr_id = rnd.choice(true_ids)   #for curr_id in true_ids[:-1]:  #p_t = list()
-        curr_query = X[curr_id]
-        logging.info("Running recommendations for id : %d" %(curr_id))
-        logging.info("Corresponding query is : %s" %(curr_query))
-        ground_actions = true_ids.copy()
-        ground_actions.remove(curr_id)  #this is the possible set of actions that are correct
-        ground_queries = X[ground_actions]
-        #next_query = get_next_query('XL', setting, curr_query)
-        next_query = get_next_query(curr_query, model_dict, setting)
-        score = get_recommendation_score(ground_queries, next_query)
-        if score >= 0.5:
-            if (t > 0):
-                seq_error[t] = seq_error[t-1]
-        else:
-            seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
-
-        simv[t] = get_similarity(ft, curr_query, next_query)
-        dstv[t] = get_distance(ft, curr_query, next_query)
-
-    return seq_error, simv, dstv
-
-def run_ctrl(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
-    from random import Random
-    rnd = Random()
-    rnd.seed(42)
-    seq_error = np.zeros(shape=(n_rounds,1))
-    simv = np.zeros(shape=(n_rounds, 1))
-    dstv = np.zeros(shape=(n_rounds, 1))
-
-    if setting == 'pretrained':
-        return seq_error, simv, dstv
-
-    for t in range(n_rounds):
-        curr_id = rnd.choice(true_ids)   #for curr_id in true_ids[:-1]:  #p_t = list()
-        curr_query = X[curr_id]
-        logging.info("Running recommendations for id : %d" %(curr_id))
-        logging.info("Corresponding query is : %s" %(curr_query))
-        ground_actions = true_ids.copy()
-        ground_actions.remove(curr_id)  #this is the possible set of actions that are correct
-        ground_queries = X[ground_actions]
-        #next_query = get_next_query('CTRL', setting, curr_query)
-        next_query = get_next_query(curr_query, model_dict, setting)
-        score = get_recommendation_score(ground_queries, next_query)
-        if score >= 0.5:
-            if (t > 0):
-                seq_error[t] = seq_error[t-1]
-        else:
-            seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
-
-        simv[t] = get_similarity(ft, curr_query, next_query)
-        dstv[t] = get_distance(ft, curr_query, next_query)
-
-    return seq_error, simv, dstv
-
-
-def run_gpt(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
-    from random import Random
-    rnd = Random()
-    rnd.seed(42)
-    seq_error = np.zeros(shape=(n_rounds,1))
-    simv = np.zeros(shape=(n_rounds, 1))
-    dstv = np.zeros(shape=(n_rounds, 1))
-    for t in range(n_rounds):
-        curr_id = rnd.choice(true_ids)   #for curr_id in true_ids[:-1]:  #p_t = list()
-        curr_query = X[curr_id]
-        logging.info("Running recommendations for id : %d" %(curr_id))
-        logging.info("Corresponding query is : %s" %(curr_query))
-        ground_actions = true_ids.copy()
-        ground_actions.remove(curr_id)  #this is the possible set of actions that are correct
-        ground_queries = X[ground_actions]
-        next_query = get_next_query(curr_query, model_dict, setting)
-        score = get_recommendation_score(ground_queries, next_query)
-        if score >= 0.5:
-            if (t > 0):
-                seq_error[t] = seq_error[t-1]
-        else:
-            seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
-
-        simv[t] = get_similarity(ft, curr_query, next_query)
-        dstv[t] = get_distance(ft, curr_query, next_query)
-
-    return seq_error, simv, dstv
-
-def run_dqr_cab(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
-    from random import Random
-    rnd1 = Random()
-    rnd1.seed(42)
-    rnd2 = Random()
-    rnd2.seed(99)
-    random.seed(42)
-    eta = 1e-3
-    seq_error = np.zeros(shape=(n_rounds, 1))
-    simv = np.zeros(shape=(n_rounds, 1))
-    dstv = np.zeros(shape=(n_rounds, 1))
-    r_t = 1
-    w_t = dict()
-    cand = set()
-    s_t = 0
-    for t in range(n_rounds):
-        curr_id = rnd1.choice(true_ids)   #for curr_id in true_ids[:-1]:  #p_t = list()
-        curr_query = X[curr_id]
-        logging.info("Running recommendations for id : %d" %(curr_id))
-        logging.info("Corresponding query is : %s" %(curr_query))
-        ground_actions = true_ids.copy()
-        ground_actions.remove(curr_id)  #this is the possible set of actions that are correct
-        ground_queries = X[ground_actions]
-        cand_t = get_recommendations(curr_query, cand_set_sz, model_dict, setting)
-        tsz = len(cand)
-        cand_sz = 1 if tsz == 0 else tsz
-        cand_t = cand_t.difference(cand)
-        tsz = len(cand_t)
-        cand_t_sz = 1 if tsz == 0 else tsz
-        for q in cand_t:
-            w_t[q] = eta/((1-eta)*cand_t_sz*cand_sz)
-        w_k = list(w_t.keys())
-        p_t = [ (1-eta)*w + eta/cand_sz for w in w_t.values() ]
-        cand.update(cand_t)
-        logger.info("candidate set are: {}".format(','.join(map(str, cand))))
-        ind = rnd2.choices(range(len(p_t)), weights=p_t)[0]
-        cu
-        logger.info("getting recommendation scores")
-        score = get_recommendation_score(ground_queries,w_k[ind])
-        logger.info("recommendation score is: %f" %(score))
-        if score >= 0.5:
-            r_t = 1
-            if (t > 0):
-                seq_error[t] = seq_error[t-1]
-        else:
-            r_t = 0
-            seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
-
-        r_hat = r_t/(p_t[ind] + 
-        w_t[w_k[ind]] = w_t[w_k[ind]]*np.exp(eta*r_hat)
-
-        simv[t] = get_similarity(ft, curr_query, w_k[ind])
-        dstv[t] = get_distance(ft, curr_query, w_k[ind])
-
-    return seq_error, simv , dstv
-
-def run_exp3_ss(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
-    from random import Random
-    rnd1 = Random()
-    rnd1.seed(42)
-    rnd2 = Random()
-    rnd2.seed(99)
-    random.seed(42)
-    eta = 1e-3
-    seq_error = np.zeros(shape=(n_rounds, 1))
-    simv = np.zeros(shape=(n_rounds, 1))
-    dstv = np.zeros(shape=(n_rounds, 1))
-    r_t = 1
-    w_t = dict()
-    cand = set()
-    
-    for t in range(n_rounds):
-        curr_id = rnd1.choice(true_ids)   #for curr_id in true_ids[:-1]:  #p_t = list()
-        curr_query = X[curr_id]
-        logging.info("Running recommendations for id : %d" %(curr_id))
-        logging.info("Corresponding query is : %s" %(curr_query))
-        ground_actions = true_ids.copy()
-        ground_actions.remove(curr_id)  #this is the possible set of actions that are correct
-        ground_queries = X[ground_actions]
-        cand_t = get_recommendations(curr_query, cand_set_sz, model_dict, setting)
-        tsz = len(cand)
-        cand_sz = 1 if tsz == 0 else tsz
-        cand_t = cand_t.difference(cand)
-        tsz = len(cand_t)
-        cand_t_sz = 1 if tsz == 0 else tsz
-        for q in cand_t:
-            w_t[q] = eta/((1-eta)*cand_t_sz*cand_sz)
-        w_k = list(w_t.keys())
-        p_t = [ (1-eta)*w + eta/cand_sz for w in w_t.values() ]
-        cand.update(cand_t)
-        logger.info("candidate set are: {}".format(','.join(map(str, cand))))
-        ind = rnd2.choices(range(len(p_t)), weights=p_t)[0]
-        logger.info("getting recommendation scores")
-        score = get_recommendation_score(ground_queries,w_k[ind])
-        logger.info("recommendation score is: %f" %(score))
-        if score >= 0.5:
-            r_t = 1
-            if (t > 0):
-                seq_error[t] = seq_error[t-1]
-        else:
-            r_t = 0
-            seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
-
-        r_hat = r_t/p_t[ind]
-        w_t[w_k[ind]] = w_t[w_k[ind]]*np.exp(eta*r_hat)
-
-        simv[t] = get_similarity(ft, curr_query, w_k[ind])
-        dstv[t] = get_distance(ft, curr_query, w_k[ind])
-
-    return seq_error, simv , dstv
-
-def run_exp3(setting, model_dict, X, true_ids, n_rounds, cand_set_sz=50, ft):
-    from random import Random
-    rnd1 = Random()
-    rnd1.seed(42)
-    rnd2 = Random()
-    rnd2.seed(99)
-    random.seed(42)
-    eta = 1e-3
-    seq_error = np.zeros(shape=(n_rounds, 1))
-    simv = np.zeros(shape=(n_rounds, 1))
-    dstv = np.zeros(shape=(n_rounds, 1))
-    r_t = 1
-    w_t = dict()
-    cand = set()
-    
-    for t in range(n_rounds):
-        curr_id = rnd1.choice(true_ids)   #for curr_id in true_ids[:-1]:  #p_t = list()
-        curr_query = X[curr_id]
-        logging.info("Running recommendations for id : %d" %(curr_id))
-        logging.info("Corresponding query is : %s" %(curr_query))
-        ground_actions = true_ids.copy()
-        ground_actions.remove(curr_id)  #this is the possible set of actions that are correct
-        ground_queries = X[ground_actions]
-        if (t == 1):
-            cand = get_recommendations(curr_query, cand_set_sz, model_dict, setting)
-        for q in cand_t:
-            w_t[q] = eta/((1-eta)*cand_t_sz*cand_sz)
-        w_k = list(w_t.keys())
-        p_t = [ (1-eta)*w + eta/cand_sz for w in w_t.values() ]
-        cand.update(cand_t)
-        logger.info("candidate set are: {}".format(','.join(map(str, cand))))
-        ind = rnd2.choices(range(len(p_t)), weights=p_t)[0]
-        logger.info("getting recommendation scores")
-        score = get_recommendation_score(ground_queries,w_k[ind])
-        logger.info("recommendation score is: %f" %(score))
-        if score >= 0.5:
-            r_t = 1
-            if (t > 0):
-                seq_error[t] = seq_error[t-1]
-        else:
-            r_t = 0
-            seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
-
-        r_hat = r_t/p_t[ind]
-        w_t[w_k[ind]] = w_t[w_k[ind]]*np.exp(eta*r_hat)
-
-        simv[t] = get_similarity(ft, curr_query, w_k[ind])
-        dstv[t] = get_distance(ft, curr_query, w_k[ind])
-
-    return seq_error, simv , dstv
-
-
-def run_exp3(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
-    from random import Random
-    rnd1 = Random()
-    rnd1.seed(42)
-    rnd2 = Random()
-    rnd2.seed(99)
-    random.seed(42)
-    eta = 1e-3
-    seq_error = np.zeros(shape=(n_rounds, 1))
-    simv = np.zeros(shape=(n_rounds, 1))
-    dstv = np.zeros(shape=(n_rounds, 1))
-    r_t = 1
-    w_t = dict()
-    cand = set()
-    
-    for t in range(n_rounds):
-        curr_id = rnd1.choice(true_ids)   #for curr_id in true_ids[:-1]:  #p_t = list()
-        curr_query = X[curr_id]
-        logging.info("Running recommendations for id : %d" %(curr_id))
-        logging.info("Corresponding query is : %s" %(curr_query))
-        ground_actions = true_ids.copy()
-        ground_actions.remove(curr_id)  #this is the possible set of actions that are correct
-        ground_queries = X[ground_actions]
-        cand_t = get_recommendations(curr_query, cand_set_sz, model_dict, setting)
-        tsz = len(cand)
-        cand_sz = 1 if tsz == 0 else tsz
-        cand_t = cand_t.difference(cand)
-        tsz = len(cand_t)
-        cand_t_sz = 1 if tsz == 0 else tsz
-        for q in cand_t:
-            w_t[q] = eta/((1-eta)*cand_t_sz*cand_sz)
-        w_k = list(w_t.keys())
-        p_t = [ (1-eta)*w + eta/cand_sz for w in w_t.values() ]
-        cand.update(cand_t)
-        logger.info("candidate set are: {}".format(','.join(map(str, cand))))
-        ind = rnd2.choices(range(len(p_t)), weights=p_t)[0]
-        logger.info("getting recommendation scores")
-        score = get_recommendation_score(ground_queries,w_k[ind])
-        logger.info("recommendation score is: %f" %(score))
-        if score >= 0.5:
-            r_t = 1
-            if (t > 0):
-                seq_error[t] = seq_error[t-1]
-        else:
-            r_t = 0
-            seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
-
-        r_hat = r_t/p_t[ind]
-        w_t[w_k[ind]] = w_t[w_k[ind]]*np.exp(eta*r_hat)
-
-        simv[t] = get_similarity(ft, curr_query, w_k[ind])
-        dstv[t] = get_distance(ft, curr_query, w_k[ind])
-
-    return seq_error, simv , dstv
-
-
-
-
-def policy_evaluation(bandit, setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
-    if bandit == 'EXP3':
-        return run_exp3(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft)
-    if bandit == 'GPT':
-        return run_gpt(setting, model_dict['GPT'], X, true_ids, n_rounds, cand_set_sz, ft)
-    if bandit == 'CTRL':
-        return run_ctrl(setting, model_dict['CTRL'], X, true_ids, n_rounds, cand_set_sz, ft)
-    if bandit == 'XL':
-        return run_xl(setting, model_dict['XL'], X, true_ids, n_rounds, cand_set_sz, ft)
-
-def regret_calculation(seq_error):
-    t = len(seq_error)
-    regret = [x / y for x, y in zip(seq_error, range(1, t + 1))]
-    return regret 
-
-def get_distance(ft, curr_query, pred_query):
-    pred = ' '.join(list(set(pred_query.split())))
-    curr = ' '.join(list(set(curr_query.split())))
-    p_vec = get_query_embeddings(ft, pred)
-    c_vec = get_query_embeddings(ft, curr)
-    return euclidean_distances(p_vec.reshape(1,-1),c_vec.reshape(1,-1))[0][0]
-
-def get_similarity(ft, curr_query, pred_query):
-    pred = ' '.join(list(set(pred_query.split())))
-    curr = ' '.join(list(set(curr_query.split())))
-    p_vec = get_query_embeddings(ft, pred)
-    c_vec = get_query_embeddings(ft, curr)
-    return cosine_similarity(p_vec.reshape(1,-1),c_vec.reshape(1,-1))[0][0]
