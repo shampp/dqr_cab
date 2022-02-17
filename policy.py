@@ -143,7 +143,7 @@ def run_exp3_ss(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
     return seq_error, simv , dstv
 
 
-def run_dqr_cab(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
+def run_dqr_cab_s(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
     from random import Random
     rnd1 = Random()
     rnd1.seed(42)
@@ -197,11 +197,15 @@ def run_dqr_cab(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
             r_t = 0
             seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
 
-        r_hat = r_t/p_t[ind]
-        w_t[w_k[ind]] = w_t[w_k[ind]]*np.exp(eta*r_hat)
-
         simv[t] = get_similarity(ft, curr_query, w_k[ind])
         dstv[t] = get_distance(ft, curr_query, w_k[ind])
+        gamma = 1-simv[t]
+        eta 
+
+        r_hat = r_t/(p_t[ind] + gamma)
+        w_t[w_k[ind]] = w_t[w_k[ind]]*np.exp(eta*r_hat)
+
+
     return seq_error, simv , dstv
 
 
