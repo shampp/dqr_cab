@@ -1,5 +1,8 @@
 from sklearn.metrics.pairwise import euclidean_distances, cosine_similarity
 from fasttxt import  get_query_embeddings
+import numpy as np
+import logging
+from recommendation import *
 
 def policy_evaluation(bandit, setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
     if bandit == 'GPT':

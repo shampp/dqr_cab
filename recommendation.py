@@ -39,7 +39,7 @@ def get_recommendations(curr_query, cand_set_sz, model_dict, setting):
             special_tokens = model_dict[method]['spl_tok']
 
             input_ids = torch.tensor(tokenizer.encode(curr_query)).unsqueeze(0)
-            outputs = model.generate(input_ids=input_ids, num_beams=20, num_return_sequences=cand_set_sz, max_length=mlen, do_sample=False, temperature=0.4)
+            outputs = model.generate(input_ids=input_ids, num_beams=30, num_return_sequences=cand_set_sz, max_length=mlen, do_sample=False, temperature=0.4)
             rmds = list()
             for i in range(cand_set_sz):
                 ss = tokenizer.decode(outputs[i], skip_special_tokens=False)

@@ -3,11 +3,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import logging
 from pathlib import Path
-from recommendation import *
+#from recommendation import *
 from fasttxt import load_ft_model
 from sklearn.metrics.pairwise import euclidean_distances, cosine_similarity
 from plot import simple_plot, twinx_plot
-from policy import policy_evaluation
+from policy import policy_evaluation, regret_calculation
 
 def run_bandit_arms(dt, setting, bandit):
     import transformers
@@ -95,8 +95,9 @@ def run_bandit_arms(dt, setting, bandit):
         print("average similarity of %d is: %f" %(cand_sz, simv))
         print("average distance of %d is: %f" %(cand_sz, dstv))
 
-    filename = 'arm_regret.pdf'
-    simple_plot(regret,filename)
+    plot_fname = 'arm_regret.pdf'
+    raw_fname = 'arm_regret.txt'
+    simple_plot(regret, plot_fname, raw_fname, 'k', 'cumulative regret')
 
 
 def run_bandit_round(dt,setting):
@@ -106,7 +107,8 @@ def run_bandit_round(dt,setting):
     rnd = Random()
     rnd.seed(44)
 
-    n_rounds = 500
+    #n_rounds = 500
+    n_rounds = 20
     cand_set_sz = 3
     experiment_bandit = list() 
     df, X, anchor_ids, noof_anchors = get_data(dt)
@@ -171,8 +173,9 @@ def run_bandit_round(dt,setting):
         print("average similarity of %s is: %f" %(bandit, simv))
         print("average distance of %s is: %f" %(bandit, dstv))
 
-    filename = 'round_regret.pdf'
-    simple_plot(regret,filename)
-    filename = 'round_diversity.pdf'
-    twinx_plot(avg_sim, avg_dst, filename)
+    plot_fname = 'round_regret.pdf'
+    simple_plot(n_rounds, noof_anchors, regret, plot_fname, 'round_regret.txt', 'rounds', 'cumulative regret')
+    plot_fname = 'round_diversity.pdf'
+    twinx_plot(n_rounds, noof_anchors, avg_sim, avg_dst, plot_fname, 'diversity.txt', 'rounds',
+    'similarity', 'distance')
 

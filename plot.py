@@ -1,7 +1,12 @@
 import matplotlib.pyplot as plt
 from matplotlib import rc
 
-def simple_plot(data,filename):
+def simple_plot(n_rounds, noof_anchors, data, plot_fname, raw_fname, xlab, ylab):
+    if (not isinstance(data,dict)):
+        print("data should be dictionary")
+        exit(1)
+
+    colors = ['b', 'r', 'k', 'c', 'g', 'c', 'm', 'y']
     f = plt.figure()
     f.clear()
     plt.clf()
@@ -10,30 +15,35 @@ def simple_plot(data,filename):
         fig, ax = plt.subplots(frameon=False)
         rc('mathtext',default='regular')
         rc('text', usetex=True)
-        col = {2:'b', 3:'r', 5:'k', 10:'c'}
-        regret_file = 'cand_cum_regret.txt'
-        with open(regret_file, "w") as regret_fd:
+        candidate_ix = data.keys()
+        col = {}
+        for i,ix in enumarate(candidate_ix):
+            col[ix] = colors[i] #{2:'b', 3:'r', 5:'k', 10:'c'}
+
+        with open(raw_fname, "w") as raw_fd:
             for cand_sz in candidate_ix:
-                cum_regret = [sum(x)/noof_anchors for x in zip(*regret[cand_sz].values())]
+                cum_regret = [sum(x)/noof_anchors for x in zip(*data[cand_sz].values())]
                 val = str(cand_sz)+','+','.join([str(e) for e in cum_regret])
-                print(val, file=regret_fd)
-                ax.plot(range(n_rounds), cum_regret, c=col[cand_sz], ls='-', label=r'$k = {}$'.format(cand_sz))
-                ax.set_xlabel(r'k')
-                ax.set_ylabel(r'cumulative regret')
+                print(val, file=raw_fd)
+                ax.plot(range(n_rounds), cum_regret, c=col[cand_sz], ls='-', label=r'{}'.format(cand_sz))
+                ax.set_xlabel(r'{}'.format(xlab))
+                ax.set_ylabel(r'{}'.format(ylab))
                 ax.legend()
-            fig.savefig('arm_regret_%s.pdf' %(setting),format='pdf')
+            fig.savefig(plot_fname,format='pdf')
             f = plt.figure()
             f.clear()
             plt.close(f)
 
-def twinx_plot(data1,data2,filename):
+
+def twinx_plot(n_rounds, noof_anchors, data1, data2, plot_fname, raw_fname, xlab, ylab1, ylab2):
     if (type(data1) != type(data2)):
         print("data type of the plot data differs ..... Exiting")
         exit(1)
     if (not isinstance(data1,dict)):
         print("data should be dictionary")
         exit(1)
-             
+
+    colors = ['b', 'r', 'k', 'c', 'g', 'c', 'm', 'y']
     f = plt.figure()
     f.clear()
     plt.clf()
@@ -42,28 +52,33 @@ def twinx_plot(data1,data2,filename):
         fig, ax1 = plt.subplots(frameon=False)
         rc('mathtext',default='regular')
         rc('text', usetex=True)
-        col = {2:'b', 3:'r', 5:'k', 10:'c'}
-        sim_file = 'cand_cum_sim.txt'
-        with open(regret_file, "w") as regret_fd:
-            for key in data1:
-                cum_regret = [sum(x)/noof_anchors for x in zip(*regret[cand_sz].values())]
-                val = str(cand_sz)+','+','.join([str(e) for e in cum_regret])
-                print(val, file=regret_fd)
-                ax1.plot(range(n_rounds), cum_regret, c=col[cand_sz], ls='-', label=r'$k = {}$'.format(cand_sz))
+        candidate_ix = data1.keys()
+        col = {}
+        for i,ix in enumarate(candidate_ix):
+            col[ix] = colors[i] #{2:'b', 3:'r', 5:'k', 10:'c'}
 
-            ax1.set_ylabel(r'cumulative regret')
+        with open(raw_fname, "w") as raw_fd:
+            for key in candidate_ix:
+                d_vals = [sum(x)/noof_anchors for x in zip(*data1[key].values())]
+                val = str(key)+','+','.join([str(e) for e in d_vals])
+                print(val, file=raw_fd)
+                ax1.plot(range(n_rounds), d_vals, c=col[key], ls='-',
+                        label=r'{}'.format(key))
+
+            ax1.set_ylabel(r'{}'.format(ylab1))
             ax1.legend()
             ax2 = ax1.twinx();
-        with open(regret_file, "w") as regret_fd:
-            for key in data1:
-                cum_regret = [sum(x)/noof_anchors for x in zip(*regret[cand_sz].values())]
-                val = str(cand_sz)+','+','.join([str(e) for e in cum_regret])
-                print(val, file=regret_fd)
-                ax2.plot(range(n_rounds), cum_regret, c=col[cand_sz], ls='-', label=r'$k = {}$'.format(cand_sz))
-                ax2.set_ylabel(r'cumulative regret')
+        with open(raw_fname, "a") as raw_fd:
+            for key in candidate_ix:
+                d_vals = [sum(x)/noof_anchors for x in zip(*data2[key].values())]
+                val = str(key)+','+','.join([str(e) for e in d_vals])
+                print(val, file=raw_fd)
+                ax2.plot(range(n_rounds), d_vals, c=col[key], ls='-',
+                        label=r'{}'.format(key))
+            ax2.set_ylabel(r'{}'.format(ylab2))
 
-            ax1.set_xlabel(r'k')
-            fig.savefig('arm_regret_%s.pdf' %(setting),format='pdf')
+            ax1.set_xlabel(r'{}'.format(xlab))
+            fig.savefig(plot_fname,format='pdf')
             f = plt.figure()
             f.clear()
             plt.close(f)

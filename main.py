@@ -10,8 +10,8 @@ def main():
     for dt in dataset:
         #df = preprocess(dt)
         #tokenize(df,dt)
-        run_bandit_round(dt,'scratch')
-        run_bandit_arms(dt,'scratch')
+        #run_bandit_round(dt,'scratch')
+        #run_bandit_arms(dt,'scratch')
         run_bandit_round(dt,'pretrained')
         #run_bandit_arms(dt,'pretrained')
         

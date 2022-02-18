@@ -69,7 +69,7 @@ def get_data(dt):
     #epsilon = 0.5
     rg = Generator(PCG64(12345))
     #cnt = 100
-    cnt = 5
+    cnt = 2
     dest_file = get_dest_file(dt)
     if dest_file.is_file():
         df = load_processed_data(dt,dest_file)
