@@ -6,10 +6,12 @@ def policy_evaluation(bandit, setting, model_dict, X, true_ids, n_rounds, cand_s
         return run_gpt(setting, model_dict['GPT'], X, true_ids, n_rounds, cand_set_sz, ft)
     if bandit == 'EXP3':
         return run_exp3(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft)
-    if bandit == 'EXP3-SS':
+    if bandit == 'EXP3_SS':
         return run_exp3_ss(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft)
-    if bandit == 'DQR_CAB':
-        return run_dqr_cab(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft)
+    if bandit == 'DQR_CAB_S':
+        return run_dqr_cab_s(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft)
+    if bandit == 'DQR_CAB_SC':
+        return run_dqr_cab_sc(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft)
 
 def regret_calculation(seq_error):
     t = len(seq_error)
@@ -158,6 +160,9 @@ def run_dqr_cab_s(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
     w_t = dict()
     cand = set()
     s_t = 0
+    C_n = log(50,10)
+    delta = 0.1
+    C_d = log(51/delta,10)
 
     for t in range(n_rounds):
         curr_id = rnd1.choice(true_ids)   #for curr_id in true_ids[:-1]:  #p_t = list()
@@ -198,15 +203,88 @@ def run_dqr_cab_s(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
             seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
 
         simv[t] = get_similarity(ft, curr_query, w_k[ind])
+        mis = min(simv)
+        mas = max(simv)
         dstv[t] = get_distance(ft, curr_query, w_k[ind])
         gamma = 1-simv[t]
-        eta 
-
+        eta = sqrt((C_n + 2*((1-mis)/(1-mas))*C_d)/(t*50))
+        beta = eta/(2*(1-mis))
+        gamma = beta*gamma
         r_hat = r_t/(p_t[ind] + gamma)
         w_t[w_k[ind]] = w_t[w_k[ind]]*np.exp(eta*r_hat)
 
+    return seq_error, simv , dstv
+
+def run_dqr_cab_sc(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):
+    from random import Random
+    rnd1 = Random()
+    rnd1.seed(42)
+    rnd2 = Random()
+    rnd2.seed(99)
+    random.seed(42)
+    eta = 1e-3
+    seq_error = np.zeros(shape=(n_rounds, 1))
+    simv = np.zeros(shape=(n_rounds, 1))
+    dstv = np.zeros(shape=(n_rounds, 1))
+    r_t = 1
+    w_t = dict()
+    cand = set()
+    s_t = 0
+    C_n = log(50,10)
+    delta = 0.1
+    C_d = log(51/delta,10)
+
+    for t in range(n_rounds):
+        curr_id = rnd1.choice(true_ids)   #for curr_id in true_ids[:-1]:  #p_t = list()
+        curr_query = X[curr_id]
+        logging.info("Running recommendations for id : %d" %(curr_id))
+        logging.info("Corresponding query is : %s" %(curr_query))
+        ground_actions = true_ids.copy()
+        ground_actions.remove(curr_id)  #this is the possible set of actions that are correct
+        ground_queries = X[ground_actions]
+        cand_t = get_recommendations(curr_query, cand_set_sz, model_dict, setting)
+        tsz = len(cand)
+        cand_sz = 1 if tsz == 0 else tsz
+        cand_t = cand_t.difference(cand)
+        tsz = len(cand_t)
+        cand_t_sz = 1 if tsz == 0 else tsz
+        if (t == 0):
+            for q in cand_t:
+                w_t[q] = eta/((1-eta)*cand_t_sz)
+        else:
+            W = sum([w_t[q] for q in cand])
+            for q in cand_t:
+                w_t[q] = (eta*W)/((1-eta)*cand_t_sz)
+
+        w_k = list(w_t.keys())
+        p_t = [ (1-eta)*w + eta/cand_sz for w in w_t.values() ]
+        cand.update(cand_t)
+        logger.info("candidate set are: {}".format(','.join(map(str, cand))))
+        ind = rnd2.choices(range(len(p_t)), weights=p_t)[0]
+        logger.info("getting recommendation scores")
+        score = get_recommendation_score(ground_queries,w_k[ind])
+        logger.info("recommendation score is: %f" %(score))
+        if score >= 0.5:
+            r_t = 1
+            if (t > 0):
+                seq_error[t] = seq_error[t-1]
+        else:
+            r_t = 0
+            seq_error[t] = 1 if (t==0) else seq_error[t-1] + 1.0
+
+        simv[t] = get_similarity(ft, curr_query, w_k[ind])
+        mis = min(simv)
+        mas = max(simv)
+        dstv[t] = get_distance(ft, curr_query, w_k[ind])
+        gamma = (1-simv[t])/len(cand)
+        eta = sqrt((C_n + 2*((1-mis)/(1-mas))*C_d)/(t*50))
+        beta = eta/(2*(1-mis))
+        gamma = beta*gamma
+        r_hat = r_t/(p_t[ind] + gamma)
+        w_t[w_k[ind]] = w_t[w_k[ind]]*np.exp(eta*r_hat)
 
     return seq_error, simv , dstv
+
 
 
 def run_gpt(setting, model_dict, X, true_ids, n_rounds, cand_set_sz, ft):

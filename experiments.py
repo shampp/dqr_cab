@@ -113,7 +113,7 @@ def run_bandit_round(dt,setting):
     model_dict = {}
     if setting == 'pretrained':
         #experiment_bandit = ['EXP3', 'XL', 'GPT', 'CTRL']
-        experiment_bandit = ['GPT', 'EXP3', 'EXP3-SS', 'DQR-CAB']
+        experiment_bandit = ['GPT', 'EXP3', 'EXP3_SS', 'DQR_CAB_S', 'DQR_CAB_SC']
 
         from transformers import (TransfoXLLMHeadModel, TransfoXLTokenizer)
         model_dest = '../Data/semanticscholar/model/xl'
@@ -173,4 +173,6 @@ def run_bandit_round(dt,setting):
 
     filename = 'round_regret.pdf'
     simple_plot(regret,filename)
+    filename = 'round_diversity.pdf'
+    twinx_plot(avg_sim, avg_dst, filename)
 
